@@ -281,13 +281,15 @@ create or replace package body json_validator is
     v_err_msg varchar2(32767);
   begin
     v_err_msg := error_msg;
-    for i in 1 .. placeholders.count loop
-      v_err_msg := regexp_replace(srcstr     => v_err_msg
-                                 ,pattern    => '(%s)|(%d)'
-                                 ,replacestr => placeholders(i)
-                                 ,position   => 1
-                                 ,occurrence => 1);
-    end loop;
+    if placeholders is not null then
+      for i in 1 .. placeholders.count loop
+        v_err_msg := regexp_replace(srcstr     => v_err_msg
+                                   ,pattern    => '(%s)|(%d)'
+                                   ,replacestr => placeholders(i)
+                                   ,position   => 1
+                                   ,occurrence => 1);
+      end loop;
+    end if;
   
     error(v_err_msg);
   end;
@@ -672,6 +674,7 @@ create or replace package body json_validator is
     v_items_jv        json_element_t;
     v_items_jl        json_array_t;
     v_additionalitems boolean := true;
+    v_add_item_schema json_object_t;
   
     procedure check_length is
       v_min integer;
@@ -713,7 +716,13 @@ create or replace package body json_validator is
       v_items_jv := schema.get('items');
     
       if schema.has('additionalItems') then
-        v_additionalitems := schema.get_boolean('additionalItems');
+        case get_type(schema.get('additionalItems')) 
+          when 'boolean' then
+            v_additionalitems := schema.get_boolean('additionalItems');
+          when 'object' then
+            v_add_item_schema := schema.get_object('additionalItems');
+            v_additionalitems := true;
+        end case;
       end if;
     
       if v_items_jv.is_object then
@@ -738,22 +747,31 @@ create or replace package body json_validator is
         
           gv_curr_path.remove(gv_curr_path.get_size - 1);
         end loop;
+        
+        if v_additionalitems and v_add_item_schema is not null then
+          for i in least(v_items_jl.get_size, v_data_jl.get_size)..v_data_jl.get_size-1 loop
+            gv_curr_path.append(i);
+            validate_type(v_add_item_schema, v_data_jl.get(i));
+            gv_curr_path.remove(gv_curr_path.get_size - 1);
+          end loop;
+        end if;
       end if;
     end if;
   
   end check_type_array;
 
-  procedure check_type_string(schema json_object_t, data json_element_t) is
+  procedure check_type_string(schema json_object_t, data json_element_t) is   
     v_string varchar2(32767);
   
     procedure check_length is
+      c_length constant binary_integer:= length(v_string);
     begin
-      if schema.has('minLength') and length(v_string) < schema.get_number('minLength') then
-        error(gc_err_minlength_tooshort, t_placeholders(v_string, schema.get_number('minLength'), length(v_string)));
+      if schema.has('minLength') and c_length < schema.get_number('minLength') then
+        error(gc_err_minlength_tooshort, t_placeholders(v_string, c_length, schema.get_number('minLength')));
       end if;
     
-      if schema.has('maxLength') and length(v_string) > schema.get_number('maxLength') then
-        error(gc_err_maxlength_toolong, t_placeholders(v_string, schema.get_number('maxLength'), length(v_string)));
+      if schema.has('maxLength') and c_length > schema.get_number('maxLength') then
+        error(gc_err_maxlength_toolong, t_placeholders(v_string, c_length, schema.get_number('maxLength')));
       end if;
     end check_length;
   
@@ -770,9 +788,10 @@ create or replace package body json_validator is
         end if;
       end if;
     end check_pattern;
-  begin
+  begin  
     v_string := data.to_string;
-  
+    v_string := substr(v_string,2,length(v_string)-2);
+    
     check_length;
   
     check_pattern;
@@ -860,6 +879,9 @@ create or replace package body json_validator is
     v_was_failure         boolean := false;
     v_was_success         boolean := false;
     v_was_another_success boolean := false;
+    
+    v_errors_stash gv_errors%type;
+    v_errres_cnt pls_integer;
   
     resolved_schema json_object_t;
   
@@ -899,29 +921,31 @@ create or replace package body json_validator is
     resolved_schema := resolve_ref(schema);
   
     if resolved_schema.has('allOf') then
-      if resolved_schema.get('allOf').is_array then
+      if resolved_schema.get('allOf').is_array or resolved_schema.get('allOf').is_object then
+        
+        if resolved_schema.get('allOf').is_array then
+          v_allanyoneof_jl := resolved_schema.get_array('allOf');          
+        else
+          v_allanyoneof_jl := json_array_t();
+          v_allanyoneof_jl.append(resolved_schema.get_object('allOf'));
+        end if;
+      
         v_allanyoneof_jl := resolved_schema.get_array('allOf');
         v_to_match_count := v_allanyoneof_jl.get_size;
-      
+        
+        v_errors_stash := gv_errors;
+        
         for i in 0 .. v_allanyoneof_jl.get_size - 1 loop
-          begin
-            validate_type(treat(v_allanyoneof_jl.get(i) as json_object_t), data);
+          gv_errors.delete;
+          
+          validate_type(treat(v_allanyoneof_jl.get(i) as json_object_t), data);
+          
+          if gv_errors.count = 0 then
             v_matched := v_matched + 1;
-          exception
-            when others then
-              null;
-          end;
+          end if;
         end loop;
-      elsif resolved_schema.get('allOf').is_object then
-        v_allanyoneof_j  := resolved_schema.get_object('allOf');
-        v_to_match_count := 1;
-        begin
-          validate_type(v_allanyoneof_j, data);
-          v_matched := v_matched + 1;
-        exception
-          when others then
-            null;
-        end;
+        
+        gv_errors := v_errors_stash;
       else
         error(gc_err_invalid_schema);
       end if;
@@ -930,31 +954,33 @@ create or replace package body json_validator is
         error(gc_err_dr4_allof_fail, t_placeholders(v_matched, v_to_match_count));
       end if;
     elsif resolved_schema.has('anyOf') then
-      if resolved_schema.get('anyOf').is_array then
-        v_allanyoneof_jl := resolved_schema.get_array('anyOf');
+      if resolved_schema.get('anyOf').is_array or resolved_schema.get('anyOf').is_object then
+        
+        if resolved_schema.get('anyOf').is_array then
+          v_allanyoneof_jl := resolved_schema.get_array('anyOf');          
+        else
+          v_allanyoneof_jl := json_array_t();
+          v_allanyoneof_jl.append(resolved_schema.get_object('anyOf'));
+        end if;
+
         v_to_match_count := v_allanyoneof_jl.get_size;
+        
+        v_errors_stash := gv_errors;
       
         for i in 0 .. v_allanyoneof_jl.get_size - 1 loop
-          begin
-            validate_type(treat(v_allanyoneof_jl.get(i) as json_object_t), data);
+          gv_errors.delete;
+
+          validate_type(treat(v_allanyoneof_jl.get(i) as json_object_t), data);
+          
+          if gv_errors.count = 0 then
             v_matched := v_matched + 1;
             exit;
-          exception
-            when others then
-              null;
-          end;
+          end if;
+          
         end loop;
-      elsif resolved_schema.get('anyOf').is_object then
-        v_allanyoneof_j  := resolved_schema.get_object('anyOf');
-        v_to_match_count := 1;
-      
-        begin
-          validate_type(v_allanyoneof_j, data);
-          v_matched := v_matched + 1;
-        exception
-          when others then
-            null;
-        end;
+        
+        gv_errors := v_errors_stash;
+
       else
         error(gc_err_invalid_schema);
       end if;
@@ -963,31 +989,31 @@ create or replace package body json_validator is
         error(gc_err_schema_nomatch, t_placeholders(v_to_match_count));
       end if;
     elsif resolved_schema.has('oneOf') then
-      if resolved_schema.get('oneOf').is_array then
+      if resolved_schema.get('oneOf').is_array or resolved_schema.get('oneOf').is_object then
+        
+        if resolved_schema.get('oneOf').is_array then
+          v_allanyoneof_jl := resolved_schema.get_array('oneOf');          
+        else
+          v_allanyoneof_jl := json_array_t();
+          v_allanyoneof_jl.append(resolved_schema.get_object('oneOf'));
+        end if;
+      
         v_allanyoneof_jl := resolved_schema.get_array('oneOf');
         v_to_match_count := v_allanyoneof_jl.get_size;
+        
+        v_errors_stash := gv_errors;
       
         for i in 0 .. v_allanyoneof_jl.get_size - 1 loop
-          begin
-            validate_type(treat(v_allanyoneof_jl.get(i) as json_object_t), data);
+          gv_errors.delete;
+
+          validate_type(treat(v_allanyoneof_jl.get(i) as json_object_t), data);
+          
+          if gv_errors.count = 0 then
             v_matched := v_matched + 1;
-          exception
-            when others then
-              null;
-          end;
+          end if;
         end loop;
-      elsif resolved_schema.get('oneOf').is_object then
-        v_allanyoneof_j  := resolved_schema.get_object('oneOf');
-        v_to_match_count := 1;
-      
-        begin
-          validate_type(v_allanyoneof_j, data);
-          v_matched := v_matched + 1;
         
-        exception
-          when others then
-            null;
-        end;
+        gv_errors := v_errors_stash;
       else
         error(gc_err_invalid_schema);
       end if;
@@ -997,29 +1023,28 @@ create or replace package body json_validator is
       end if;
     
     elsif resolved_schema.has('not') then
-      if resolved_schema.get('not').is_array then
-        v_allanyoneof_jl := resolved_schema.get_array('not');
+      if resolved_schema.get('not').is_array or resolved_schema.get('not').is_object then
+        if resolved_schema.get('not').is_array then
+          v_allanyoneof_jl := resolved_schema.get_array('not');          
+        else
+          v_allanyoneof_jl := json_array_t();
+          v_allanyoneof_jl.append(resolved_schema.get_object('not'));
+        end if;
+      
+        v_errors_stash := gv_errors;
       
         for i in 0 .. v_allanyoneof_jl.get_size - 1 loop
-          begin
-            validate_type(treat(v_allanyoneof_jl.get(i) as json_object_t), data);
+          gv_errors.delete;
+
+          validate_type(treat(v_allanyoneof_jl.get(i) as json_object_t), data);
+          
+          if gv_errors.count = 0 then
             v_matched := v_matched + 1;
-            exit;
-          exception
-            when others then
-              null;
-          end;
+          end if;
         end loop;
-      elsif resolved_schema.get('not').is_object then
-        v_allanyoneof_j := resolved_schema.get_object('not');
-      
-        begin
-          validate_type(v_allanyoneof_j, data);
-          v_matched := v_matched + 1;
-        exception
-          when others then
-            null;
-        end;
+        
+        gv_errors := v_errors_stash;
+
       else
         error(gc_err_invalid_schema);
       end if;
@@ -1027,44 +1052,44 @@ create or replace package body json_validator is
       if v_matched > 0 then
         error(gc_err_dr4_not_fail, null);
       end if;
-    else
+    end if;
     
-      if resolved_schema.has('type') then
-        jv := resolved_schema.get('type');
-        if jv.is_array then
-          v_types := treat(jv as json_array_t);
-        else
-          v_types := json_array_t();
-          v_types.append(jv);
-        end if;
+    if resolved_schema.has('type') then
+      jv := resolved_schema.get('type');
+      if jv.is_array then
+        v_types := treat(jv as json_array_t);
       else
         v_types := json_array_t();
-        v_types.append('any');
+        v_types.append(jv);
       end if;
-    
-      -- check type matches any of listed
-      simple_type_check;
-    
-      -- check element in enum
-      check_enum;
-    
-      -- schema-based type check
-      case get_type(data)
-        when 'object' then
-          check_type_object(resolved_schema, data);
-        when 'array' then
-          check_type_array(resolved_schema, data);
-        when 'string' then
-          check_type_string(resolved_schema, data);
-        when 'number' then
-          check_type_number(resolved_schema, data);
-        when 'boolean' then
-          check_type_boolean(resolved_schema, data);
-        when 'null' then
-          check_type_null(resolved_schema, data);
-      end case;
-    
+    else
+      v_types := json_array_t();
+      v_types.append('any');
     end if;
+    
+    -- check type matches any of listed
+    simple_type_check;
+    
+    -- check element in enum
+    check_enum;
+    
+    -- schema-based type check
+    case get_type(data)
+      when 'object' then
+        check_type_object(resolved_schema, data);
+      when 'array' then
+        check_type_array(resolved_schema, data);
+      when 'string' then
+        check_type_string(resolved_schema, data);
+      when 'number' then
+        check_type_number(resolved_schema, data);
+      when 'boolean' then
+        check_type_boolean(resolved_schema, data);
+      when 'null' then
+        check_type_null(resolved_schema, data);
+    end case;
+    
+    --end if;
   
   end validate_type;
 
