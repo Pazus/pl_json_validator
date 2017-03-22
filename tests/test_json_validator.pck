@@ -16,9 +16,60 @@ create or replace package test_json_validator is
 
   --%test(default)
   procedure test_default;
+  
+  --%test
+  procedure test_difinitions;
+  
+  --%test
+  procedure test_dependencies;
+  
+  --%test
+  procedure test_enums;
 
   --%test(a schema given for items)
   procedure test_items;
+  
+  --%test
+  procedure test_max_items;
+  
+  --%test
+  procedure test_max_length;
+  
+  --%test
+  procedure test_max_properties;
+  
+  --%test
+  procedure test_maximum;
+  
+  --%test
+  procedure test_min_items;
+  
+  --%test
+  procedure test_min_length;
+  
+  --%test
+  procedure test_min_properties;
+  
+  --%test
+  procedure test_minimum;
+  
+  --%test
+  procedure test_multiple_of;
+  
+  --%test
+  procedure test_not;
+  
+  --%test
+  procedure test_one_of;
+  
+  --%test
+  procedure test_pattern;
+  
+  --%test
+  procedure test_pattern_properties;
+  
+  --%test
+  procedure test_properties;
 
   --%test
   procedure test_ref;
@@ -640,6 +691,327 @@ create or replace package body test_json_validator is
   }
 ]}'));
   end;
+  
+  procedure test_difinitions is
+  begin
+    validate_test_set(json_array_t.parse(q'{[
+  {
+    "description": "valid definition",
+    "schema": {
+      "$ref": "http://json-schema.org/draft-04/schema#"
+    },
+    "tests": [
+      {
+        "description": "valid definition schema",
+        "data": {
+          "definitions": {
+            "foo": {
+              "type": "integer"
+            }
+          }
+        },
+        "valid": true
+      }
+    ]
+  },
+  {
+    "description": "invalid definition",
+    "schema": {
+      "$ref": "http://json-schema.org/draft-04/schema#"
+    },
+    "tests": [
+      {
+        "description": "invalid definition schema",
+        "data": {
+          "definitions": {
+            "foo": {
+              "type": 1
+            }
+          }
+        },
+        "valid": false
+      }
+    ]
+  }
+]}'));
+  end;
+  
+  procedure test_dependencies is
+  begin
+    validate_test_set(json_array_t.parse(q'{[
+  {
+    "description": "dependencies",
+    "schema": {
+      "dependencies": {
+        "bar": [
+          "foo"
+        ]
+      }
+    },
+    "tests": [
+      {
+        "description": "neither",
+        "data": {},
+        "valid": true
+      },
+      {
+        "description": "nondependant",
+        "data": {
+          "foo": 1
+        },
+        "valid": true
+      },
+      {
+        "description": "with dependency",
+        "data": {
+          "foo": 1,
+          "bar": 2
+        },
+        "valid": true
+      },
+      {
+        "description": "missing dependency",
+        "data": {
+          "bar": 2
+        },
+        "valid": false
+      },
+      {
+        "description": "ignores non-objects",
+        "data": "foo",
+        "valid": true
+      }
+    ]
+  },
+  {
+    "description": "multiple dependencies",
+    "schema": {
+      "dependencies": {
+        "quux": [
+          "foo",
+          "bar"
+        ]
+      }
+    },
+    "tests": [
+      {
+        "description": "neither",
+        "data": {},
+        "valid": true
+      },
+      {
+        "description": "nondependants",
+        "data": {
+          "foo": 1,
+          "bar": 2
+        },
+        "valid": true
+      },
+      {
+        "description": "with dependencies",
+        "data": {
+          "foo": 1,
+          "bar": 2,
+          "quux": 3
+        },
+        "valid": true
+      },
+      {
+        "description": "missing dependency",
+        "data": {
+          "foo": 1,
+          "quux": 2
+        },
+        "valid": false
+      },
+      {
+        "description": "missing other dependency",
+        "data": {
+          "bar": 1,
+          "quux": 2
+        },
+        "valid": false
+      },
+      {
+        "description": "missing both dependencies",
+        "data": {
+          "quux": 1
+        },
+        "valid": false
+      }
+    ]
+  },
+  {
+    "description": "multiple dependencies subschema",
+    "schema": {
+      "dependencies": {
+        "bar": {
+          "properties": {
+            "foo": {
+              "type": "integer"
+            },
+            "bar": {
+              "type": "integer"
+            }
+          }
+        }
+      }
+    },
+    "tests": [
+      {
+        "description": "valid",
+        "data": {
+          "foo": 1,
+          "bar": 2
+        },
+        "valid": true
+      },
+      {
+        "description": "no dependency",
+        "data": {
+          "foo": "quux"
+        },
+        "valid": true
+      },
+      {
+        "description": "wrong type",
+        "data": {
+          "foo": "quux",
+          "bar": 2
+        },
+        "valid": false
+      },
+      {
+        "description": "wrong type other",
+        "data": {
+          "foo": 2,
+          "bar": "quux"
+        },
+        "valid": false
+      },
+      {
+        "description": "wrong type both",
+        "data": {
+          "foo": "quux",
+          "bar": "quux"
+        },
+        "valid": false
+      }
+    ]
+  }
+]}'));
+  end;
+  
+  procedure test_enums is
+  begin
+    validate_test_set(json_array_t.parse(q'{[
+  {
+    "description": "simple enum validation",
+    "schema": {
+      "enum": [
+        1,
+        2,
+        3
+      ]
+    },
+    "tests": [
+      {
+        "description": "one of the enum is valid",
+        "data": 1,
+        "valid": true
+      },
+      {
+        "description": "something else is invalid",
+        "data": 4,
+        "valid": false
+      }
+    ]
+  },
+  {
+    "description": "heterogeneous enum validation",
+    "schema": {
+      "enum": [
+        6,
+        "foo",
+        [],
+        true,
+        {
+          "foo": 12
+        }
+      ]
+    },
+    "tests": [
+      {
+        "description": "one of the enum is valid",
+        "data": [],
+        "valid": true
+      },
+      {
+        "description": "something else is invalid",
+        "data": null,
+        "valid": false
+      },
+      {
+        "description": "objects are deep compared",
+        "data": {
+          "foo": false
+        },
+        "valid": false
+      }
+    ]
+  },
+  {
+    "description": "enums in properties",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "foo": {
+          "enum": [
+            "foo"
+          ]
+        },
+        "bar": {
+          "enum": [
+            "bar"
+          ]
+        }
+      },
+      "required": [
+        "bar"
+      ]
+    },
+    "tests": [
+      {
+        "description": "both properties are valid",
+        "data": {
+          "foo": "foo",
+          "bar": "bar"
+        },
+        "valid": true
+      },
+      {
+        "description": "missing optional property is valid",
+        "data": {
+          "bar": "bar"
+        },
+        "valid": true
+      },
+      {
+        "description": "missing required property is invalid",
+        "data": {
+          "foo": "foo"
+        },
+        "valid": false
+      },
+      {
+        "description": "missing all properties is invalid",
+        "data": {},
+        "valid": false
+      }
+    ]
+  }
+]}'));
+  end;
 
   procedure test_items is
   begin
@@ -705,6 +1077,950 @@ create or replace package body test_json_validator is
           "foo",
           1
         ],
+        "valid": false
+      }
+    ]
+  }
+]}'));
+  end;
+  
+  procedure test_max_items is
+  begin
+    validate_test_set(json_array_t.parse('[
+  {
+    "description": "maxItems validation",
+    "schema": {
+      "maxItems": 2
+    },
+    "tests": [
+      {
+        "description": "shorter is valid",
+        "data": [
+          1
+        ],
+        "valid": true
+      },
+      {
+        "description": "exact length is valid",
+        "data": [
+          1,
+          2
+        ],
+        "valid": true
+      },
+      {
+        "description": "too long is invalid",
+        "data": [
+          1,
+          2,
+          3
+        ],
+        "valid": false
+      },
+      {
+        "description": "ignores non-arrays",
+        "data": "foobar",
+        "valid": true
+      }
+    ]
+  }
+]'));
+  end;
+  
+  procedure test_max_length is
+  begin
+    validate_test_set(json_array_t.parse('[
+  {
+    "description": "maxLength validation",
+    "schema": {
+      "maxLength": 2
+    },
+    "tests": [
+      {
+        "description": "shorter is valid",
+        "data": "f",
+        "valid": true
+      },
+      {
+        "description": "exact length is valid",
+        "data": "fo",
+        "valid": true
+      },
+      {
+        "description": "too long is invalid",
+        "data": "foo",
+        "valid": false
+      },
+      {
+        "description": "ignores non-strings",
+        "data": 100,
+        "valid": true
+      },
+      {
+        "description": "two supplementary Unicode code points is long enough",
+        "data": "\uD83D\uDCA9\uD83D\uDCA9",
+        "valid": true
+      }
+    ]
+  }
+]'));
+  end;
+
+  procedure test_max_properties is
+  begin
+    validate_test_set(json_array_t.parse('[
+  {
+    "description": "maxProperties validation",
+    "schema": {
+      "maxProperties": 2
+    },
+    "tests": [
+      {
+        "description": "shorter is valid",
+        "data": {
+          "foo": 1
+        },
+        "valid": true
+      },
+      {
+        "description": "exact length is valid",
+        "data": {
+          "foo": 1,
+          "bar": 2
+        },
+        "valid": true
+      },
+      {
+        "description": "too long is invalid",
+        "data": {
+          "foo": 1,
+          "bar": 2,
+          "baz": 3
+        },
+        "valid": false
+      },
+      {
+        "description": "ignores non-objects",
+        "data": "foobar",
+        "valid": true
+      }
+    ]
+  }
+]'));
+  end;
+  
+  procedure test_maximum is
+  begin
+    validate_test_set(json_array_t.parse('[
+  {
+    "description": "maximum validation",
+    "schema": {
+      "maximum": 3.0
+    },
+    "tests": [
+      {
+        "description": "below the maximum is valid",
+        "data": 2.6,
+        "valid": true
+      },
+      {
+        "description": "above the maximum is invalid",
+        "data": 3.5,
+        "valid": false
+      },
+      {
+        "description": "ignores non-numbers",
+        "data": "x",
+        "valid": true
+      }
+    ]
+  },
+  {
+    "description": "exclusiveMaximum validation",
+    "schema": {
+      "maximum": 3.0,
+      "exclusiveMaximum": true
+    },
+    "tests": [
+      {
+        "description": "below the maximum is still valid",
+        "data": 2.2,
+        "valid": true
+      },
+      {
+        "description": "boundary point is invalid",
+        "data": 3.0,
+        "valid": false
+      }
+    ]
+  }
+]'));
+  end;
+  
+  procedure test_min_items is
+  begin
+    validate_test_set(json_array_t.parse('[
+  {
+    "description": "minItems validation",
+    "schema": {
+      "minItems": 1
+    },
+    "tests": [
+      {
+        "description": "longer is valid",
+        "data": [
+          1,
+          2
+        ],
+        "valid": true
+      },
+      {
+        "description": "exact length is valid",
+        "data": [
+          1
+        ],
+        "valid": true
+      },
+      {
+        "description": "too short is invalid",
+        "data": [],
+        "valid": false
+      },
+      {
+        "description": "ignores non-arrays",
+        "data": "",
+        "valid": true
+      }
+    ]
+  }
+]'));
+  end;
+  
+  procedure test_min_length is
+  begin
+    validate_test_set(json_array_t.parse('[
+  {
+    "description": "minLength validation",
+    "schema": {
+      "minLength": 2
+    },
+    "tests": [
+      {
+        "description": "longer is valid",
+        "data": "foo",
+        "valid": true
+      },
+      {
+        "description": "exact length is valid",
+        "data": "fo",
+        "valid": true
+      },
+      {
+        "description": "too short is invalid",
+        "data": "f",
+        "valid": false
+      },
+      {
+        "description": "ignores non-strings",
+        "data": 1,
+        "valid": true
+      },
+      {
+        "description": "one supplementary Unicode code point is not long enough",
+        "data": "\uD83D\uDCA9",
+        "valid": false
+      }
+    ]
+  }
+]'));
+  end;
+  
+  procedure test_min_properties is
+  begin
+    validate_test_set(json_array_t.parse('[
+  {
+    "description": "minProperties validation",
+    "schema": {
+      "minProperties": 1
+    },
+    "tests": [
+      {
+        "description": "longer is valid",
+        "data": {
+          "foo": 1,
+          "bar": 2
+        },
+        "valid": true
+      },
+      {
+        "description": "exact length is valid",
+        "data": {
+          "foo": 1
+        },
+        "valid": true
+      },
+      {
+        "description": "too short is invalid",
+        "data": {},
+        "valid": false
+      },
+      {
+        "description": "ignores non-objects",
+        "data": "",
+        "valid": true
+      }
+    ]
+  }
+]'));
+  end;
+  
+
+
+  procedure test_minimum is
+  begin
+    validate_test_set(json_array_t.parse('[
+  {
+    "description": "minimum validation",
+    "schema": {
+      "minimum": 1.1
+    },
+    "tests": [
+      {
+        "description": "above the minimum is valid",
+        "data": 2.6,
+        "valid": true
+      },
+      {
+        "description": "below the minimum is invalid",
+        "data": 0.6,
+        "valid": false
+      },
+      {
+        "description": "ignores non-numbers",
+        "data": "x",
+        "valid": true
+      }
+    ]
+  },
+  {
+    "description": "exclusiveMinimum validation",
+    "schema": {
+      "minimum": 1.1,
+      "exclusiveMinimum": true
+    },
+    "tests": [
+      {
+        "description": "above the minimum is still valid",
+        "data": 1.2,
+        "valid": true
+      },
+      {
+        "description": "boundary point is invalid",
+        "data": 1.1,
+        "valid": false
+      }
+    ]
+  }
+]'));
+  end;
+  
+  procedure test_multiple_of is
+  begin
+    validate_test_set(json_array_t.parse('[
+  {
+    "description": "by int",
+    "schema": {
+      "multipleOf": 2
+    },
+    "tests": [
+      {
+        "description": "int by int",
+        "data": 10,
+        "valid": true
+      },
+      {
+        "description": "int by int fail",
+        "data": 7,
+        "valid": false
+      },
+      {
+        "description": "ignores non-numbers",
+        "data": "foo",
+        "valid": true
+      }
+    ]
+  },
+  {
+    "description": "by number",
+    "schema": {
+      "multipleOf": 1.5
+    },
+    "tests": [
+      {
+        "description": "zero is multiple of anything",
+        "data": 0,
+        "valid": true
+      },
+      {
+        "description": "4.5 is multiple of 1.5",
+        "data": 4.5,
+        "valid": true
+      },
+      {
+        "description": "35 is not multiple of 1.5",
+        "data": 35,
+        "valid": false
+      }
+    ]
+  },
+  {
+    "description": "by small number",
+    "schema": {
+      "multipleOf": 0.0001
+    },
+    "tests": [
+      {
+        "description": "0.0075 is multiple of 0.0001",
+        "data": 0.0075,
+        "valid": true
+      },
+      {
+        "description": "0.00751 is not multiple of 0.0001",
+        "data": 0.00751,
+        "valid": false
+      }
+    ]
+  }
+]'));
+  end;
+  
+  procedure test_not is
+  begin
+    validate_test_set(json_array_t.parse('[
+  {
+    "description": "not",
+    "schema": {
+      "not": {
+        "type": "integer"
+      }
+    },
+    "tests": [
+      {
+        "description": "allowed",
+        "data": "foo",
+        "valid": true
+      },
+      {
+        "description": "disallowed",
+        "data": 1,
+        "valid": false
+      }
+    ]
+  },
+  {
+    "description": "not multiple types",
+    "schema": {
+      "not": {
+        "type": [
+          "integer",
+          "boolean"
+        ]
+      }
+    },
+    "tests": [
+      {
+        "description": "valid",
+        "data": "foo",
+        "valid": true
+      },
+      {
+        "description": "mismatch",
+        "data": 1,
+        "valid": false
+      },
+      {
+        "description": "other mismatch",
+        "data": true,
+        "valid": false
+      }
+    ]
+  },
+  {
+    "description": "not more complex schema",
+    "schema": {
+      "not": {
+        "type": "object",
+        "properties": {
+          "foo": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "tests": [
+      {
+        "description": "match",
+        "data": 1,
+        "valid": true
+      },
+      {
+        "description": "other match",
+        "data": {
+          "foo": 1
+        },
+        "valid": true
+      },
+      {
+        "description": "mismatch",
+        "data": {
+          "foo": "bar"
+        },
+        "valid": false
+      }
+    ]
+  },
+  {
+    "description": "forbidden property",
+    "schema": {
+      "properties": {
+        "foo": {
+          "not": {}
+        }
+      }
+    },
+    "tests": [
+      {
+        "description": "property present",
+        "data": {
+          "foo": 1,
+          "bar": 2
+        },
+        "valid": false
+      },
+      {
+        "description": "property absent",
+        "data": {
+          "bar": 1,
+          "baz": 2
+        },
+        "valid": true
+      }
+    ]
+  }
+]'));
+  end;
+  
+  procedure test_one_of is
+  begin
+    validate_test_set(json_array_t.parse('[
+  {
+    "description": "oneOf",
+    "schema": {
+      "oneOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "minimum": 2
+        }
+      ]
+    },
+    "tests": [
+      {
+        "description": "first oneOf valid",
+        "data": 1,
+        "valid": true
+      },
+      {
+        "description": "second oneOf valid",
+        "data": 2.5,
+        "valid": true
+      },
+      {
+        "description": "both oneOf valid",
+        "data": 3,
+        "valid": false
+      },
+      {
+        "description": "neither oneOf valid",
+        "data": 1.5,
+        "valid": false
+      }
+    ]
+  },
+  {
+    "description": "oneOf with base schema",
+    "schema": {
+      "type": "string",
+      "oneOf": [
+        {
+          "minLength": 2
+        },
+        {
+          "maxLength": 4
+        }
+      ]
+    },
+    "tests": [
+      {
+        "description": "mismatch base schema",
+        "data": 3,
+        "valid": false
+      },
+      {
+        "description": "one oneOf valid",
+        "data": "foobar",
+        "valid": true
+      },
+      {
+        "description": "both oneOf valid",
+        "data": "foo",
+        "valid": false
+      }
+    ]
+  }
+]'));
+  end;
+  
+  procedure test_pattern is
+  begin
+    validate_test_set(json_array_t.parse('[
+  {
+    "description": "pattern validation",
+    "schema": {
+      "pattern": "^a*$"
+    },
+    "tests": [
+      {
+        "description": "a matching pattern is valid",
+        "data": "aaa",
+        "valid": true
+      },
+      {
+        "description": "a non-matching pattern is invalid",
+        "data": "abc",
+        "valid": false
+      },
+      {
+        "description": "ignores non-strings",
+        "data": true,
+        "valid": true
+      }
+    ]
+  },
+  {
+    "description": "pattern is not anchored",
+    "schema": {
+      "pattern": "a+"
+    },
+    "tests": [
+      {
+        "description": "matches a substring",
+        "data": "xxaayy",
+        "valid": true
+      }
+    ]
+  }
+]'));
+  end;
+  
+  procedure test_pattern_properties is
+  begin
+    validate_test_set(json_array_t.parse('[
+  {
+    "description": "patternProperties validates properties matching a regex",
+    "schema": {
+      "patternProperties": {
+        "f.*o": {
+          "type": "integer"
+        }
+      }
+    },
+    "tests": [
+      {
+        "description": "a single valid match is valid",
+        "data": {
+          "foo": 1
+        },
+        "valid": true
+      },
+      {
+        "description": "multiple valid matches is valid",
+        "data": {
+          "foo": 1,
+          "foooooo": 2
+        },
+        "valid": true
+      },
+      {
+        "description": "a single invalid match is invalid",
+        "data": {
+          "foo": "bar",
+          "fooooo": 2
+        },
+        "valid": false
+      },
+      {
+        "description": "multiple invalid matches is invalid",
+        "data": {
+          "foo": "bar",
+          "foooooo": "baz"
+        },
+        "valid": false
+      },
+      {
+        "description": "ignores non-objects",
+        "data": 12,
+        "valid": true
+      }
+    ]
+  },
+  {
+    "description": "multiple simultaneous patternProperties are validated",
+    "schema": {
+      "patternProperties": {
+        "a*": {
+          "type": "integer"
+        },
+        "aaa*": {
+          "maximum": 20
+        }
+      }
+    },
+    "tests": [
+      {
+        "description": "a single valid match is valid",
+        "data": {
+          "a": 21
+        },
+        "valid": true
+      },
+      {
+        "description": "a simultaneous match is valid",
+        "data": {
+          "aaaa": 18
+        },
+        "valid": true
+      },
+      {
+        "description": "multiple matches is valid",
+        "data": {
+          "a": 21,
+          "aaaa": 18
+        },
+        "valid": true
+      },
+      {
+        "description": "an invalid due to one is invalid",
+        "data": {
+          "a": "bar"
+        },
+        "valid": false
+      },
+      {
+        "description": "an invalid due to the other is invalid",
+        "data": {
+          "aaaa": 31
+        },
+        "valid": false
+      },
+      {
+        "description": "an invalid due to both is invalid",
+        "data": {
+          "aaa": "foo",
+          "aaaa": 31
+        },
+        "valid": false
+      }
+    ]
+  },
+  {
+    "description": "regexes are not anchored by default and are case sensitive",
+    "schema": {
+      "patternProperties": {
+        "[0-9]{2,}": {
+          "type": "boolean"
+        },
+        "X_": {
+          "type": "string"
+        }
+      }
+    },
+    "tests": [
+      {
+        "description": "non recognized members are ignored",
+        "data": {
+          "answer 1": "42"
+        },
+        "valid": true
+      },
+      {
+        "description": "recognized members are accounted for",
+        "data": {
+          "a31b": null
+        },
+        "valid": false
+      },
+      {
+        "description": "regexes are case sensitive",
+        "data": {
+          "a_x_3": 3
+        },
+        "valid": true
+      },
+      {
+        "description": "regexes are case sensitive, 2",
+        "data": {
+          "a_X_3": 3
+        },
+        "valid": false
+      }
+    ]
+  }
+]'));
+  end;
+  
+  procedure test_properties is
+  begin
+    validate_test_set(json_array_t.parse(q'{[
+  {
+    "description": "object properties validation",
+    "schema": {
+      "properties": {
+        "foo": {
+          "type": "integer"
+        },
+        "bar": {
+          "type": "string"
+        }
+      }
+    },
+    "tests": [
+      {
+        "description": "both properties present and valid is valid",
+        "data": {
+          "foo": 1,
+          "bar": "baz"
+        },
+        "valid": true
+      },
+      {
+        "description": "one property invalid is invalid",
+        "data": {
+          "foo": 1,
+          "bar": {}
+        },
+        "valid": false
+      },
+      {
+        "description": "both properties invalid is invalid",
+        "data": {
+          "foo": [],
+          "bar": {}
+        },
+        "valid": false
+      },
+      {
+        "description": "doesn't invalidate other properties",
+        "data": {
+          "quux": []
+        },
+        "valid": true
+      },
+      {
+        "description": "ignores non-objects",
+        "data": [],
+        "valid": true
+      }
+    ]
+  },
+  {
+    "description": "properties, patternProperties, additionalProperties interaction",
+    "schema": {
+      "properties": {
+        "foo": {
+          "type": "array",
+          "maxItems": 3
+        },
+        "bar": {
+          "type": "array"
+        }
+      },
+      "patternProperties": {
+        "f.o": {
+          "minItems": 2
+        }
+      },
+      "additionalProperties": {
+        "type": "integer"
+      }
+    },
+    "tests": [
+      {
+        "description": "property validates property",
+        "data": {
+          "foo": [
+            1,
+            2
+          ]
+        },
+        "valid": true
+      },
+      {
+        "description": "property invalidates property",
+        "data": {
+          "foo": [
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        "valid": false
+      },
+      {
+        "description": "patternProperty invalidates property",
+        "data": {
+          "foo": []
+        },
+        "valid": false
+      },
+      {
+        "description": "patternProperty validates nonproperty",
+        "data": {
+          "fxo": [
+            1,
+            2
+          ]
+        },
+        "valid": true
+      },
+      {
+        "description": "patternProperty invalidates nonproperty",
+        "data": {
+          "fxo": []
+        },
+        "valid": false
+      },
+      {
+        "description": "additionalProperty ignores property",
+        "data": {
+          "bar": []
+        },
+        "valid": true
+      },
+      {
+        "description": "additionalProperty validates others",
+        "data": {
+          "quux": 3
+        },
+        "valid": true
+      },
+      {
+        "description": "additionalProperty invalidates others",
+        "data": {
+          "quux": "foo"
+        },
         "valid": false
       }
     ]
