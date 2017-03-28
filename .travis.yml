@@ -32,7 +32,8 @@ env:
     - SQLCLI="$HOME/sqlcl/bin/sql"
     - ORACLE_PWD="oracle"
     - ORACLE_SID=ORCLPDB1
-    - ORACLE_VERSION=$"12c-se2-r2"
+    - ORACLE_VERSION="12c-se2-r2-v2"
+    - DOCKER_OPTIONS="-v /dev/pdbs:/opt/oracle/oradata/pdbs"
 
 cache:
   directories:
