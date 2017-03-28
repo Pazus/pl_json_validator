@@ -36,8 +36,10 @@ env:
     - DOCKER_OPTIONS="-v /dev/pdbs:/opt/oracle/oradata/pdbs"
 
 cache:
+  pip: true
   directories:
     - $CACHE_DIR
+    - node_modules
 
 before_install:
   - pip install -r .travis/python_req.txt
