@@ -83,6 +83,23 @@ create or replace package test_json_validator is
 
   --%test
   procedure test_unique_items;
+  
+  --https://github.com/everit-org/json-schema/tree/master/tests/src/test/resources/org/everit/json/schema/issues/issue17
+  --%test
+  --%disabled
+  procedure additional_test1;
+  
+  --https://github.com/everit-org/json-schema/tree/master/tests/src/test/resources/org/everit/json/schema/issues/issue21
+  --%test
+  procedure additional_test2;
+  
+  --https://github.com/everit-org/json-schema/tree/master/tests/src/test/resources/org/everit/json/schema/issues/issue22
+  --%test
+  procedure additional_test3;
+  
+  --https://github.com/everit-org/json-schema/tree/master/tests/src/test/resources/org/everit/json/schema/issues/issue25
+  --%test
+  procedure additional_test4;  
 
 end test_json_validator;
 /
@@ -2849,6 +2866,137 @@ create or replace package body test_json_validator is
     ]
   }
 ]}'));
+  end;
+  
+  procedure additional_test1 is
+    l_schema json_object_t := json_object_t.parse('{
+    "id": "http://localhost:1234/yaala/_schemas/child#",
+    "allOf": [
+      {
+        "$ref": "parent"
+      },
+      {
+        "required": [
+          "s"
+        ],
+        "type": "object",
+        "properties": {
+          "s": {
+            "type": "string"
+          }
+        }
+      }
+    ]
+  }');
+    l_inval  json_object_t := json_object_t.parse('{
+    "n": "1",
+    "s": "test"
+  }');
+    l_val    json_object_t := json_object_t.parse('{
+    "n": 1,
+    "s": "test"
+  }');
+    l_errs   json_validator.tt_errs;
+  begin
+    begin
+      json_validator.validate(l_schema, l_val, l_errs);
+      ut.expect(l_errs.count, 'Check valid JSON is valid').to_equal(0);
+    exception
+      when others then
+        ut.fail('Check valid JSON is valid failed' || dbms_utility.format_error_stack);
+    end;
+
+    begin
+      json_validator.validate(l_schema, l_inval, l_errs);
+      ut.expect(l_errs.count, 'Check invalid JSON is invalid').to_(be_greater_than(0));
+    exception
+      when others then
+        ut.fail('Check invalid JSON is invalid' || dbms_utility.format_error_stack);
+    end;
+  end;
+  
+  procedure additional_test2 is
+    l_schema json_object_t := json_object_t.parse('{
+  "type": "object",
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "definitions": {
+    "language_object": {
+      "type": "object",
+      "additionalProperties": false,
+      "patternProperties": {
+        "^[a-z]{2}$": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "properties": {
+    "name": {
+      "$ref": "#/definitions/language_object",
+      "minProperties": 1
+    }
+  }
+}');
+    l_inval  json_object_t := json_object_t.parse('{
+  "name": {}
+}');
+    l_errs   json_validator.tt_errs;
+  begin
+    begin
+      json_validator.validate(l_schema, l_inval, l_errs);
+      ut.expect(l_errs.count, 'Check invalid JSON is invalid').to_(be_greater_than(0));
+    exception
+      when others then
+        ut.fail('Check invalid JSON is invalid' || dbms_utility.format_error_stack);
+    end;
+  end;
+  
+  procedure additional_test3 is
+    l_schema json_object_t := json_object_t.parse('{
+  "type": "object",
+  "$schema": "http://json-schema.org/draft-04/schema#",
+  "properties": {
+    "date": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}');
+    l_inval  json_object_t := json_object_t.parse('{
+  "date": ""
+}');
+    l_errs   json_validator.tt_errs;
+  begin
+    begin
+      json_validator.validate(l_schema, l_inval, l_errs);
+      ut.expect(l_errs.count, 'Check invalid JSON is invalid').to_(be_greater_than(0));
+    exception
+      when others then
+        ut.fail('Check invalid JSON is invalid' || dbms_utility.format_error_stack);
+    end;
+  end;
+  
+  procedure additional_test4 is
+    l_schema json_object_t := json_object_t.parse('{
+    "properties" : {
+        "weight" : {
+            "type" : "number"
+        }
+    },
+    "additionalProperties" : false
+}');
+    l_val  json_object_t := json_object_t.parse('{
+    "weight" : -0
+}');
+    l_errs   json_validator.tt_errs;
+  begin
+    begin
+      json_validator.validate(l_schema, l_val, l_errs);
+      ut.expect(l_errs.count, 'Check invalid JSON is invalid').to_equal(0);
+    exception
+      when others then
+        ut.fail('Check invalid JSON is invalid' || dbms_utility.format_error_stack);
+    end;
   end;
 
 end test_json_validator;

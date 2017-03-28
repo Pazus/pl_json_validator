@@ -1,0 +1,61 @@
+sudo: required
+language: python
+
+addons:
+  apt:
+    packages:
+      - unzip
+      # Java8 Required for Sonar and SQLCL
+      - oracle-java8-installer
+      - oracle-java8-set-default
+  sonarqube:
+    token:
+      secure: ${SONAR_TOKEN}
+    branches:
+      - develop
+      - master
+
+services:
+  - docker
+
+env:
+  global:
+    - PLJS_OWNER=pljs
+    - PLJS_OWNER_PASSWORD=pljs
+    - PLJS_OWNER_TABLESPACE=users
+    - UT3_USER=ut3
+    - UT3_PASSWORD=ut3
+    - UT3_OWNER_TABLESPACE=users
+    # Target Branch and Directory for Deployment of Docs
+    - CACHE_DIR=$HOME/.cache
+    # Database Env
+    - SQLCLI="$HOME/sqlcl/bin/sql"
+    - ORACLE_PWD="oracle"
+    - ORACLE_SID=ORCLPDB1
+    - ORACLE_VERSION=$"12c-se2-r2"
+
+cache:
+  directories:
+    - $CACHE_DIR
+
+before_install:
+  - pip install -r .travis/python_req.txt
+  - npm install -g phantomjs-prebuilt casperjs
+  - CONNECTION_STR="127.0.0.1:1521/$ORACLE_SID"
+
+install:
+  - bash .travis/install_sqlcl.sh
+  - docker pull $DOCKER_REPO:$ORACLE_VERSION
+  - docker run -d --name $ORACLE_VERSION $DOCKER_OPTIONS -p 1521:1521 -v $DOCKER_REPO:$ORACLE_VERSION
+  - docker logs -f $ORACLE_VERSION | grep -m 1 "DATABASE IS READY TO USE!" --line-buffered
+  - bash .travis/create_pljs_owner.sh
+  - bash .travis/install.sh
+  - bash .travis/install_utplsql.sh  
+
+script:
+  - bash .travis/tun_tests.sh
+  - sonar-scanner
+  - bash .travis/coveralls_uploader.sh
+
+#notifications:
+#  slack: utplsql:oiMuXO95TvKeAUENuDt4cPrB

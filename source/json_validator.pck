@@ -333,13 +333,13 @@ create or replace package body json_validator is
       error(gc_err_only_selfrefs_allowed);
     end if;
     
-    --l_ref_path := replace(replace(replace(ref_path,'~0','~'),'~1','/'),'%25','%');
     l_ref_path := ref_path;
   
     v_doc_path := substr(regexp_substr(l_ref_path, '#/[^#]+'), 2);
   
-    jv     := gc_base_schema; --.to_json_element_t;
-    --    v_node := substr(regexp_substr(l_ref_path, '/[^/]+', 1, v_index), 2);   
+    -- Further we are redefining the variable by itself so we need a separate copy
+    jv     := gc_base_schema.clone;
+
     v_node := replace(replace(replace(substr(regexp_substr(l_ref_path, '/[^/]+', 1, v_index), 2),'~0','~'),'~1','/'),'%25','%');
   
     while v_node is not null loop
@@ -360,27 +360,14 @@ create or replace package body json_validator is
   end get_ref;
 
   function resolve_ref(j json_object_t) return json_object_t is
+    j_t := json_object_t;
   begin
     if j.has('$ref') then
-      return treat(get_ref(j.get_string('$ref')) as json_object_t);
+      j_t := j.clone;
+      j_t.put('$ref',resolve_ref(treat(get_ref(j.get_string('$ref')) as json_object_t)));
+      return j_t;
     else
       return j;
-    end if;
-  end resolve_ref;
-
-  function resolve_ref(jv json_element_t) return json_element_t is
-    j           json_object_t;
-    resolved_jv json_element_t;
-  begin
-    if jv.is_object then
-      j := treat(jv as json_object_t);
-      if j.has('$ref') then
-        return get_ref(j.get_string('$ref'));
-      else
-        return jv;
-      end if;
-    else
-      return jv;
     end if;
   end resolve_ref;
 
@@ -583,8 +570,10 @@ create or replace package body json_validator is
       v_patternprops_patterns json_key_list;
       v_schema_keys           json_array_t;
       v_additionalproperties  boolean := true;
-      v_default_schema        json_object_t;
+      v_addprop_schema        json_object_t;
       v_pattern               varchar2(4000);
+      l_from_prop_list        boolean;
+      l_from_pattern_prop_list boolean;
     
       function match_pattern_prop(key varchar2, pattern out varchar2) return boolean is
         v_found boolean := false;
@@ -605,7 +594,7 @@ create or replace package body json_validator is
         if schema.get('additionalProperties').is_boolean then
           v_additionalproperties := schema.get_boolean('additionalProperties');
         else
-          v_default_schema       := schema.get_object('additionalProperties');
+          v_addprop_schema       := schema.get_object('additionalProperties');
           v_additionalproperties := true;
         end if;
       
@@ -624,27 +613,39 @@ create or replace package body json_validator is
       for i in 1 .. v_data_keys.count loop
       
         v_key := v_data_keys(i);
-      
-        /* TO-DO petternProperties */
-      
+        l_from_prop_list := false;
+        l_from_pattern_prop_list := false;
+        
+        gv_curr_path.append(v_key);
+        
         if v_props is not null and v_props.has(v_key) then
           -- Check property schema
-          gv_curr_path.append(v_key);
           validate_type(v_props.get_object(v_key), jdata.get(v_key));
-          gv_curr_path.remove(gv_curr_path.get_size - 1);
-        elsif match_pattern_prop(v_key, v_pattern) then
-          -- Check petternProperty schema
-          gv_curr_path.append(v_key);
-          validate_type(v_patternprops.get_object(v_pattern), jdata.get(v_key));
-          gv_curr_path.remove(gv_curr_path.get_size - 1);
-        elsif v_additionalproperties and v_default_schema is not null then
-          -- check default schema
-          gv_curr_path.append(v_key);
-          validate_type(v_default_schema, jdata.get(v_key));
-          gv_curr_path.remove(gv_curr_path.get_size - 1);
-        elsif not v_additionalproperties then
-          error(gc_err_addprops_notallowed, t_placeholders(v_key));
+          l_from_prop_list := true;        
         end if;
+        
+        if v_patternprops_patterns is not null then
+          --Check pattern property schema
+          for j in 1..v_patternprops_patterns.count loop
+            if regexp_like(v_key, v_patternprops_patterns(j)) then
+              validate_type(v_patternprops.get_object(v_patternprops_patterns(j)), jdata.get(v_key));
+              l_from_pattern_prop_list := true;  
+            end if;
+          end loop;
+        end if;
+        
+        if not l_from_prop_list and not l_from_pattern_prop_list then
+          --Check additional roperties
+          if v_additionalproperties then
+            if v_addprop_schema is not null then
+              validate_type(v_addprop_schema, jdata.get(v_key));
+            end if;
+          else
+            error(gc_err_addprops_notallowed, t_placeholders(v_key));
+          end if;
+        end if;
+        
+        gv_curr_path.remove(gv_curr_path.get_size - 1);  
       
       end loop;
     
