@@ -42,8 +42,9 @@ cache:
     - node_modules
 
 before_install:
-  - pip install -r .travis/python_req.txt
-  - npm install -g phantomjs-prebuilt casperjs
+  #- pip install -r .travis/python_req.txt
+  #- npm install -g phantomjs-prebuilt casperjs
+  - bash .travis/install_sqlcl.sh
   - CONNECTION_STR="127.0.0.1:1521/$ORACLE_SID"
 
 install:
