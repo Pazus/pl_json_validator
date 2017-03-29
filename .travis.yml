@@ -48,7 +48,6 @@ before_install:
   - CONNECTION_STR="127.0.0.1:1521/$ORACLE_SID"
 
 install:
-  - bash .travis/install_sqlcl.sh
   - docker pull $DOCKER_REPO:$ORACLE_VERSION
   - docker run -d --name $ORACLE_VERSION $DOCKER_OPTIONS -p 1521:1521 -v $DOCKER_REPO:$ORACLE_VERSION
   - docker logs -f $ORACLE_VERSION | grep -m 1 "DATABASE IS READY TO USE!" --line-buffered
