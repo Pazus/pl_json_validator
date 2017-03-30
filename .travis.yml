@@ -35,6 +35,7 @@ env:
     - ORACLE_VERSION="12c-se2-r2-v2"
     - DOCKER_OPTIONS="-v /dev/pdbs:/opt/oracle/oradata/pdbs"
     - DOCKER_REPO="viniciusam/oracledb"
+    - CONNECTION_STR="127.0.0.1:1521/$ORACLE_SID"
 
 cache:
   pip: true
@@ -46,7 +47,6 @@ before_install:
   #- pip install -r .travis/python_req.txt
   #- npm install -g phantomjs-prebuilt casperjs
   - bash .travis/install_sqlcl.sh
-  - CONNECTION_STR="127.0.0.1:1521/$ORACLE_SID"
 
 install:
   - docker login -u "$DOCKER_USER" -p "$DOCKER_PASSWORD"
