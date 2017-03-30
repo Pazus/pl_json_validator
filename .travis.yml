@@ -47,6 +47,8 @@ before_install:
   #- pip install -r .travis/python_req.txt
   #- npm install -g phantomjs-prebuilt casperjs
   - bash .travis/install_sqlcl.sh
+  - sudo mkdir -p /dev/pdbs
+  - sudo chmod -R 777 /dev/pdbs
 
 install:
   - docker login -u "$DOCKER_USER" -p "$DOCKER_PASSWORD"
