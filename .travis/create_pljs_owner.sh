@@ -5,5 +5,5 @@ cd $(dirname "$(readlink -f "$0")")
 #create user
 "$SQLCLI" -L -S sys/$ORACLE_PWD@//$CONNECTION_STR AS SYSDBA <<SQL
 set echo off
-@@create_pljs_owner.sql $PLJS_OWNER $PLJS_OWNER_PASSWORD $PLJS_OWNER_TABLESPACE
+@@../source/create_utplsql_owner.sql $PLJS_OWNER $PLJS_OWNER_PASSWORD $PLJS_OWNER_TABLESPACE
 SQL
