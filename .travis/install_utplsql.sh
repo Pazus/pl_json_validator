@@ -2,7 +2,7 @@
 set -ev
 
 cd $(dirname "$(readlink -f "$0")")
-git clone https://github.com/utPLSQL/urPLSQL.git --depth 1 utPLSQL
+git clone https://github.com/utPLSQL/urPLSQL.git --branch=master --depth 1 utPLSQL
 
 #create user
 "$SQLCLI" -L -S sys/$ORACLE_PWD@//$CONNECTION_STR AS SYSDBA <<SQL
