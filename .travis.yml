@@ -57,11 +57,11 @@ install:
   - docker logs -f $ORACLE_VERSION | grep -m 1 "DATABASE IS READY TO USE!" --line-buffered
   - docker logs $ORACLE_VERSION
   - bash .travis/create_pljs_owner.sh
-  - bash .travis/install.sh
   - bash .travis/install_utplsql.sh  
 
 script:
-  - bash .travis/tun_tests.sh
+  - bash .travis/install.sh
+  - bash .travis/run_tests.sh
   - sonar-scanner
   - bash .travis/coveralls_uploader.sh
 
