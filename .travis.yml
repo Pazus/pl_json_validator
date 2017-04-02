@@ -62,8 +62,8 @@ install:
 script:
   - bash .travis/install.sh
   - bash .travis/run_tests.sh
-  - sonar-scanner
-  - bash .travis/coveralls_uploader.sh
+#  - sonar-scanner
+#  - bash .travis/coveralls_uploader.sh
 
 #notifications:
 #  slack: utplsql:oiMuXO95TvKeAUENuDt4cPrB

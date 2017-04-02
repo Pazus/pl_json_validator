@@ -7,5 +7,6 @@ set -ev
 #sqlplus /nolog  @utPLSQL/client_source/sqlplus/ut_run.sql $PLJS_OWNER/$PLJS_OWNER_PASSWORD@//$CONNECTION_STR -f=ut_documentation_reporter -s
 "$SQLCLI" -L $PLJS_OWNER/$PLJS_OWNER_PASSWORD@//$CONNECTION_STR <<SQL
 @tests/test_json_validator.pck
+set echo on;
 exec ut.run();
 SQL
