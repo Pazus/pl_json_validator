@@ -5,6 +5,7 @@ cd $(dirname "$(readlink -f "$0")")
 
 
 #sqlplus /nolog  @utPLSQL/client_source/sqlplus/ut_run.sql $PLJS_OWNER/$PLJS_OWNER_PASSWORD@//$CONNECTION_STR -f=ut_documentation_reporter -s
-"$SQLCLI" -L -S $PLJS_OWNER/$PLJS_OWNER_PASSWORD@//$CONNECTION_STR <<SQL
+"$SQLCLI" -L $PLJS_OWNER/$PLJS_OWNER_PASSWORD@//$CONNECTION_STR <<SQL
+@tests/test_json_validator.pck
 exec ut.run();
 SQL
