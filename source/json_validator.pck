@@ -360,7 +360,7 @@ create or replace package body json_validator is
   end get_ref;
 
   function resolve_ref(j json_object_t) return json_object_t is
-    j_t := json_object_t;
+    j_t json_object_t := json_object_t;
   begin
     if j.has('$ref') then
       j_t := j.clone;
